@@ -1,0 +1,38 @@
+name: Morning market brief
+on:
+  schedule:
+    - cron: '0,30 * * * *'
+  workflow_dispatch:
+permissions: {}
+concurrency:
+  group: morning-market-brief
+  cancel-in-progress: false
+jobs:
+  collect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - name: Check schedule and generate report
+        env:
+          SITE_TOKEN: ${{ secrets.SITE_TOKEN }}
+        run: |
+          if [ -z "$SITE_TOKEN" ]; then
+            echo '::error::SITE_TOKEN secret is missing. Connect the private site before enabling the schedule.'
+            exit 1
+          fi
+          curl --fail-with-body --silent --show-error --retry 2 --retry-all-errors --retry-delay 10 --max-time 100 \
+            -H "OAI-Sites-Authorization: Bearer $SITE_TOKEN" \
+            -H 'Content-Type: application/json' \
+            --data '{"action":"tick"}' \
+            'https://morning-market-brief-kng06.asdfweqwd12.chatgpt.site/api/brief' \
+            --output result.json
+          python3 - <<'PY'
+          import json
+          data=json.load(open('result.json'))
+          if 'error' in data:
+              raise RuntimeError(data['error'])
+          print(data.get('status','Report saved'))
+          if data.get('warnings'):
+              print('::warning::Some market sources were unavailable; see the report.')
+          PY
+
